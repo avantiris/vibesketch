@@ -10,5 +10,6 @@ stay on your computer.
 Pick a tool, draw, and change the selected layer in the right panel. Drop files on the canvas to
 import them. Everything is saved as you work. More in the [manual](docs/manual.md).
 
-Free software under the [GNU AGPL](LICENSE), version 3 or later. Third-party licences:
+Copyright (C) 2026 Avantiris Association. Free software under the [GNU AGPL](LICENSE), version 3
+or later. Third-party licences:
 [THIRD-PARTY.md](THIRD-PARTY.md).
