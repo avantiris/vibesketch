@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>VibeSketch – signing in</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<style>
+  body { font: 16px system-ui, sans-serif; margin: 20vh auto; max-width: 28em; padding: 0 1em; text-align: center; color: #333; background: #fafafa; }
+  @media (prefers-color-scheme: dark) { body { color: #ddd; background: #1e1e1e; } }
+</style>
+</head>
+<body>
+<p id="msg">Finishing sign-in…</p>
+<script>
+  // Google redirects here with the result in the URL fragment. Hand it to the VibeSketch tab
+  // that started the sign-in (same origin only) and get out of the way.
+  (function () {
+    var hash = location.hash;
+    // do not leave the access token in the address bar / history
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    var msg = document.getElementById('msg');
+    try {
+      var channel = new BroadcastChannel('vibesketch-oauth');
+      channel.postMessage({ hash: hash });
+      channel.close();
+      msg.textContent = 'Signed in. You can close this window.';
+    } catch (e) {
+      msg.textContent = 'This browser cannot complete the sign-in (BroadcastChannel is unavailable).';
+      return;
+    }
+    setTimeout(function () { try { window.close(); } catch (e) {} }, 150);
+  })();
+</script>
+</body>
+</html>

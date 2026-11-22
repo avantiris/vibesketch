@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7c5cff"/>
+      <stop offset="1" stop-color="#ff5c8a"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <!-- a "v" drawn as one bezier path, with its anchor points and the handles of the middle one -->
+  <path d="M19 47H45" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M13 17C22 17 25 47 32 47S42 17 51 17" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="18" cy="47" r="3.5" fill="#fff"/>
+  <circle cx="46" cy="47" r="3.5" fill="#fff"/>
+  <rect x="26" y="41" width="12" height="12" rx="3" fill="#fff"/>
+  <rect x="29.5" y="44.500" width="5" height="5" rx="1" fill="#b45cc8"/>
+</svg>
