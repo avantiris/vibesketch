@@ -132,8 +132,10 @@ export function Popover(p: { anchor: HTMLElement | null; onClose: () => void; ch
     };
     place();
     const t = setTimeout(place, 0);
-    const down = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Element) && !p.anchor!.contains(e.target as Element)) p.onClose(); };
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); p.onClose(); } };
+    // the eyedropper works on top of an open colour popover: its clicks and its Esc are not ours
+    const eyedrop = () => document.querySelector('.eyedrop');
+    const down = (e: PointerEvent) => { if (!eyedrop() && ref.current && !ref.current.contains(e.target as Element) && !p.anchor!.contains(e.target as Element)) p.onClose(); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' && !eyedrop()) { e.stopPropagation(); p.onClose(); } };
     window.addEventListener('pointerdown', down, true);
     window.addEventListener('keydown', key, true);
     window.addEventListener('resize', place);
@@ -178,6 +180,7 @@ export const icons = {
   pen: I('M3 13l1-4 6.5-6.5a1.4 1.4 0 0 1 2 0l1 1a1.4 1.4 0 0 1 0 2L7 12z M9.5 3.5l3 3'),
   text: I('M3.5 4V3h9v1M8 3v10M6.5 13h3'),
   connector: I('M2.5 12.5h3a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2h4M11.5 1.5l2 2-2 2'),
+  slice: I('M4.5 1.5v10h10M1.5 4.5h10v10M11.5 4.500l3-3'),
   bend: I('M2.5 12.5C4 4 12 4 13.5 12.5', <><circle cx="2.500" cy="12.500" r="1.200" fill="currentColor" /><circle cx="13.500" cy="12.500" r="1.200" fill="currentColor" /><path d="M8 6.300V2.500M6.500 4l1.500-1.500L9.500 4" /></>),
   eye: I('M1.5 8s2.4-4.5 6.5-4.5S14.500 8 14.500 8 12.100 12.500 8 12.500 1.500 8 1.500 8z', <circle cx="8" cy="8" r="1.8" />),
   eyeOff: I('M2 2l12 12M6.200 3.800A6.700 6.700 0 0 1 8 3.500c4.100 0 6.500 4.500 6.500 4.500a11 11 0 0 1-1.900 2.400M10.400 11.900a6.300 6.300 0 0 1-2.400.6C3.900 12.500 1.500 8 1.500 8a11 11 0 0 1 2.700-3.100'),

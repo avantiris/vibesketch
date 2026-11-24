@@ -1,3 +1,4 @@
+import { cropEdit } from './crop.ts';
 import type { Box, GradientPaint, Mat, RectNode, ShapeNode, Vec } from '../core/model.ts';
 import { apply, dist, invert } from '../core/geom.ts';
 import { localBounds, worldBounds, worldBoundsOf, worldMatrix } from '../core/bounds.ts';
@@ -19,7 +20,7 @@ function soleRect(): RectNode | null {
   const sel = selection.value;
   if (sel.length !== 1 || pathEdit.value || textEdit.value) return null;
   const n = doc.value.nodes[sel[0]];
-  return n && n.type === 'rect' && !n.locked ? n : null;
+  return n && n.type === 'rect' && !n.locked && !n.slice && !cropEdit.value ? n : null;
 }
 
 /** inset of the radius dots from the corners, in the rect's local units */

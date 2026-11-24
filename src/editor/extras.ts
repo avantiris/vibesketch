@@ -5,7 +5,8 @@ import { around, scale as scaleM, translate } from '../core/geom.ts';
 import { worldBoundsOf } from '../core/bounds.ts';
 import { duplicateNodes, setNodes, topMost, transformWorld } from '../core/ops.ts';
 import { ensureFont, matchFace } from './fonts.ts';
-import { doc, pageId, pathEdit, scope, select, selection, toast, update } from './store.ts';
+import { stage } from './stage.ts';
+import { assetUrl, doc, page, pageId, pathEdit, scope, select, selection, toast, update, view } from './store.ts';
 
 // Smaller Figma behaviours: selection navigation, property copy / paste, quick style keys,
 // keyboard resizing, repeat-duplicate, eyedropper.
@@ -156,19 +157,104 @@ export function duplicateSmart() {
 
 // ---------------------------------------------------------------- eyedropper
 
-type EyeDropperCtor = new () => { open(): Promise<{ sRGBHex: string }> };
-const eyeDropper = (): EyeDropperCtor | undefined => (window as unknown as { EyeDropper?: EyeDropperCtor }).EyeDropper;
-export const canPickColor = (): boolean => !!eyeDropper();
+// Works the same in every browser: the canvas is rendered into a bitmap once, and a loupe
+// follows the pointer over it until a click picks the pixel under its centre.
 
-/** pick a colour from anywhere on screen; null when cancelled or unsupported */
-export async function pickColor(): Promise<Color | null> {
-  const E = eyeDropper();
-  if (!E) { toast('This browser has no eyedropper (Chrome, Edge and Brave do)'); return null; }
+let picking: (() => void) | null = null;
+
+/** the part of the page the stage shows, as pixels (device resolution) */
+async function stageSnapshot(el: HTMLElement): Promise<HTMLCanvasElement> {
+  const r = el.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(r.width * dpr));
+  canvas.height = Math.max(1, Math.round(r.height * dpr));
+  const c = canvas.getContext('2d', { willReadFrequently: true })!;
+  const bg = page.value?.background ?? { r: 0.118, g: 0.118, b: 0.118, a: 1 };
+  c.fillStyle = `rgb(${Math.round(bg.r * 255)},${Math.round(bg.g * 255)},${Math.round(bg.b * 255)})`;
+  c.fillRect(0, 0, canvas.width, canvas.height);
+  if (!page.value?.children.length) return canvas;
+  const { exportSvg } = await import('../io/export.ts');
+  const svg = await exportSvg(doc.value, pageId.value, null, { outlineText: true, background: null, assetUrl });
+  if (!(svg.width > 0 && svg.height > 0)) return canvas;
+  const url = URL.createObjectURL(new Blob([svg.svg], { type: 'image/svg+xml' }));
   try {
-    const hex = (await new E().open()).sRGBHex.replace('#', '');
-    const n = (i: number) => parseInt(hex.slice(i, i + 2), 16) / 255;
-    return { r: n(0), g: n(2), b: n(4), a: 1 };
-  } catch { return null; }
+    const img = new Image();
+    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('could not render the canvas')); img.src = url; });
+    const v = view.value;
+    c.drawImage(img, (v.x + svg.box.x * v.zoom) * dpr, (v.y + svg.box.y * v.zoom) * dpr, svg.box.w * v.zoom * dpr, svg.box.h * v.zoom * dpr);
+  } finally { URL.revokeObjectURL(url); }
+  return canvas;
+}
+
+/** Pick a colour from the canvas: a loupe follows the pointer, a click takes the colour under
+ *  it. Null when cancelled (Esc, right click, or starting it a second time). */
+export async function pickColor(): Promise<Color | null> {
+  if (picking) { picking(); return null; }
+  const el = stage.el;
+  if (!el) return null;
+  let cancelled = false;
+  picking = () => { cancelled = true; };
+  let shot: HTMLCanvasElement;
+  try { shot = await stageSnapshot(el); }
+  catch (e) { picking = null; toast(`Eyedropper failed: ${e instanceof Error ? e.message : e}`, 'error'); return null; }
+  if (cancelled) { picking = null; return null; }
+  const px = shot.getContext('2d')!;
+  const rect = el.getBoundingClientRect(), sx = shot.width / rect.width, sy = shot.height / rect.height;
+
+  const CELLS = 11, CELL = 10, SIZE = CELLS * CELL;
+  const cover = document.createElement('div');
+  cover.className = 'eyedrop';
+  cover.style.cssText = `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px`;
+  const loupe = document.createElement('div');
+  loupe.className = 'eyedrop-loupe';
+  const lens = document.createElement('canvas');
+  lens.width = lens.height = SIZE;
+  const label = document.createElement('span');
+  loupe.append(lens, label);
+  cover.append(loupe);
+  document.body.append(cover);
+  const lc = lens.getContext('2d')!;
+  lc.imageSmoothingEnabled = false;
+
+  const at = (e: { clientX: number; clientY: number }) => ({
+    x: Math.min(shot.width - 1, Math.max(0, Math.floor((e.clientX - rect.left) * sx))),
+    y: Math.min(shot.height - 1, Math.max(0, Math.floor((e.clientY - rect.top) * sy))),
+  });
+  const colorAt = (p: { x: number; y: number }): Color => { const d = px.getImageData(p.x, p.y, 1, 1).data; return { r: d[0] / 255, g: d[1] / 255, b: d[2] / 255, a: 1 }; };
+  const hexOf = (c: Color) => '#' + [c.r, c.g, c.b].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+  const move = (e: PointerEvent) => {
+    const p = at(e), half = (CELLS - 1) / 2;
+    lc.fillStyle = '#1e1e1e';
+    lc.fillRect(0, 0, SIZE, SIZE);
+    lc.drawImage(shot, p.x - half, p.y - half, CELLS, CELLS, 0, 0, SIZE, SIZE);
+    lc.strokeStyle = '#fff'; lc.lineWidth = 2;
+    lc.strokeRect(half * CELL, half * CELL, CELL, CELL);
+    lc.strokeStyle = '#000'; lc.lineWidth = 1;
+    lc.strokeRect(half * CELL - 1.5, half * CELL - 1.5, CELL + 3, CELL + 3);
+    const c = hexOf(colorAt(p));
+    label.textContent = c;
+    loupe.style.borderColor = c;
+    // beside the pointer, flipped where it would leave the stage
+    const lx = e.clientX - rect.left + 18, ly = e.clientY - rect.top + 18, w = SIZE + 8, h = SIZE + 30;
+    loupe.style.left = `${lx + w > rect.width ? lx - w - 36 : lx}px`;
+    loupe.style.top = `${ly + h > rect.height ? ly - h - 36 : ly}px`;
+    loupe.style.visibility = 'visible';
+  };
+
+  return new Promise<Color | null>(resolve => {
+    const finish = (c: Color | null) => {
+      picking = null;
+      window.removeEventListener('keydown', key, true);
+      cover.remove();
+      resolve(c);
+    };
+    const key = (e: KeyboardEvent) => { e.stopPropagation(); e.preventDefault(); if (e.key === 'Escape' || e.key.toLowerCase() === 'i') finish(null); };
+    picking = () => finish(null);
+    window.addEventListener('keydown', key, true);
+    cover.addEventListener('pointermove', move);
+    cover.addEventListener('contextmenu', e => { e.preventDefault(); finish(null); });
+    cover.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (e.button === 0) finish(colorAt(at(e))); else finish(null); });
+  });
 }
 
 /** I: eyedropper onto the selection's fill (stroke for layers without a fill) */

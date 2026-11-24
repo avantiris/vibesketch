@@ -3,6 +3,7 @@ import { align, deleteSelection, escape, flip, group, nudge, onCopy, onPaste, or
 import { cancelDrag, endTextEdit, isDragging, setSpace, setZoom, startTextEdit, zoomToFit } from './interact.ts';
 import { enterPathEdit, exitPathEdit, finishPen } from './pathtool.ts';
 import { flatten } from './boolean.ts';
+import { cropEdit, exitCrop } from './crop.ts';
 import { altDown, clearPaint, copyProperties, duplicateSmart, eyedropToSelection, pasteProperties, requestRename, resizeBy, selectParent, selectSibling, swapFillStroke, toggleTextStyle, uiHidden } from './extras.ts';
 import { ov } from './stage.ts';
 import type { Tool } from './store.ts';
@@ -15,12 +16,13 @@ function isTyping(t: EventTarget | null): boolean {
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 }
 
-const TOOLS: Record<string, Tool> = { v: 'move', h: 'hand', r: 'rect', o: 'ellipse', l: 'line', p: 'pen', t: 'text', x: 'connector' };
+const TOOLS: Record<string, Tool> = { v: 'move', h: 'hand', r: 'rect', o: 'ellipse', l: 'line', p: 'pen', t: 'text', x: 'connector', s: 'slice' };
 
 export function setTool(t: Tool) {
   if (textEdit.value) endTextEdit();
   if (ov.pen) finishPen();
   ov.connect = null;
+  if (t !== 'move' && t !== 'hand') exitCrop();
   // leaving the pen for anything else ends vector editing, except the move tool (to adjust points)
   if (pathEdit.value && t !== 'pen' && t !== 'bend' && t !== 'move' && t !== 'hand') exitPathEdit();
   if (t === 'bend' && !pathEdit.value) {
@@ -42,6 +44,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (k === 'Escape') {
     if (cancelDrag()) return done();
     if (ov.pen) { finishPen(); return done(); }
+    if (cropEdit.value) { exitCrop(); return done(); }
     if (tool.value !== 'move' && !pathEdit.value) { tool.value = 'move'; return done(); }
     escape();
     return done();
@@ -51,6 +54,7 @@ function onKeyDown(e: KeyboardEvent) {
   if (k === 'Tab') { if (!pathEdit.value) selectSibling(e.shiftKey ? -1 : 1); return done(); }
   if (k === 'Enter' && e.shiftKey && !pathEdit.value) { selectParent(); return done(); }
   if (k === 'Enter') {
+    if (cropEdit.value) { exitCrop(); return done(); }
     if (pathEdit.value) { if (ov.pen) finishPen(); else exitPathEdit(); return done(); }
     const ids = selection.value;
     if (ids.length === 1) {

@@ -49,7 +49,10 @@ export interface ImagePaint extends PaintBase {
   type: 'image';
   /** key into doc.assets, also the file name inside the project's assets/ dir */
   asset: string;
-  mode: 'fill' | 'fit' | 'stretch' | 'tile';
+  mode: 'fill' | 'fit' | 'stretch' | 'tile' | 'crop';
+  /** crop: the rectangle the whole image covers, in fractions of the layer's box (x, y from
+   *  its top left). Missing = the same placement as 'fill' */
+  crop?: { x: number; y: number; w: number; h: number };
   /** tile scale (1 = natural pixel size) */
   scale?: number;
 }
@@ -99,7 +102,12 @@ export interface ShapeBase extends NodeBase {
   dash: number[];
 }
 
-export interface RectNode extends ShapeBase { type: 'rect'; w: number; h: number; /** tl,tr,br,bl */ radii: [number, number, number, number] }
+export interface RectNode extends ShapeBase {
+  type: 'rect'; w: number; h: number; /** tl,tr,br,bl */ radii: [number, number, number, number];
+  /** an export region: not part of the artwork; exporting it gives what the page shows inside it */
+  slice?: boolean;
+}
+export const isSlice = (n: Node | undefined): n is RectNode => !!n && n.type === 'rect' && !!n.slice;
 export interface EllipseNode extends ShapeBase { type: 'ellipse'; w: number; h: number }
 export interface PolygonNode extends ShapeBase { type: 'polygon'; w: number; h: number; sides: number }
 export interface StarNode extends ShapeBase { type: 'star'; w: number; h: number; points: number; /** inner radius ratio 0..1 */ inner: number }

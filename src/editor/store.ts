@@ -12,7 +12,7 @@ import { loadSystemFonts, setProjectFonts } from './fonts.ts';
 // Central editor state. The document is an immutable snapshot; every change goes through
 // `update()` so history, saving and rendering stay consistent.
 
-export type Tool = 'move' | 'hand' | 'rect' | 'ellipse' | 'line' | 'polygon' | 'star' | 'pen' | 'bend' | 'text' | 'connector';
+export type Tool = 'move' | 'hand' | 'rect' | 'ellipse' | 'line' | 'polygon' | 'star' | 'pen' | 'bend' | 'text' | 'connector' | 'slice';
 
 export const doc = signal<Doc>(emptyDoc());
 export const pageId = signal<string>(doc.value.pages[0].id);

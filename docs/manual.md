@@ -99,7 +99,7 @@ project.
 
 | | |
 |---|---|
-| `V` `H` `R` `O` `L` `P` `T` `X` | move, hand, rectangle, ellipse, line, pen, text, connector |
+| `V` `H` `R` `O` `L` `P` `T` `X` `S` | move, hand, rectangle, ellipse, line, pen, text, connector, slice |
 | drag / `Shift` / `Alt` | move · constrain axis or proportions · duplicate, or resize from center |
 | `Ctrl` while dragging | no snapping |
 | `Alt` + hover | distances from the selection to the layer under the cursor |
@@ -108,6 +108,8 @@ project.
 | `Enter` / double-click | edit points (or text) · `Esc` leaves |
 | in point editing | its own toolbar: move, pen, bend. Drag points, handles and segments; drag the dot in the middle of a segment to pull out a new point; with the pen, click any point to branch off it; hold `Ctrl` (or use the bend tool) to drag a segment or point into a curve; `Alt` breaks handle symmetry; `Del` removes points. The panel and right-click menu have curve / straight, mirroring, add, cut, join and open / close |
 | connector tool (`X`) | drag from one layer to another: the arrow stays attached and re-routes with rounded bends when either moves. Drop on a side dot to pin that side, hold `Ctrl` for a free end. A selected connector has two end handles to re-attach it; the panel sets elbow / straight / curved, the bend radius and the arrowheads (also available for any open line). Group a box with its label (`Ctrl+G`) to move and connect them as one |
+| double-click an image | crop it: the blue handles cut the picture (it stays where it is), dragging the picture moves it behind the frame, its round corner handles scale it. `Enter` / `Esc` or a click outside finishes. `Enter` on an image still edits its outline as a vector |
+| slice tool (`S`) | draw a frame over any part of the page. Select it and export: the file is exactly what the page shows inside the frame, whatever layers that is. A slice is never part of an export itself |
 | dots inside a rectangle's corners | corner radius (`Alt`: one corner) |
 | gradient fill open in the panel | drag its two end points on the canvas (`Shift`: 45° steps) |
 | `Ctrl+E`, combine menu, right-click | flatten · union, subtract, intersect, exclude (the result is one editable path with the bottom layer's look) |
@@ -119,7 +121,7 @@ project.
 | `Shift+H` `Shift+V` | flip |
 | `Shift+X`, `Alt+/`, `Shift+/` | swap fill and stroke · remove fill · remove stroke |
 | `Ctrl+Alt+C` / `Ctrl+Alt+V` | copy / paste properties |
-| `I` | eyedropper (Chromium) |
+| `I` | eyedropper: click a colour on the canvas for the selection's fill (`Esc` cancels); also in every colour picker |
 | `Ctrl+B` / `Ctrl+I`, `Ctrl+R` | bold / italic on text layers · rename layer |
 | `1`–`9`, `0` | opacity |
 | `Ctrl`+wheel, `Space`+drag | zoom, pan · `Shift+1` fit · `Shift+2` selection · `Shift+0` 100% |
@@ -140,7 +142,7 @@ nix develop -c npm test         # unit tests; the sync tests run against a real 
 ```
 
 Browser tests drive the real app (see the header of each file in `test/e2e/`): `smoke.mjs`
-(editing, import / export, storage), `diagram.mjs` (connectors), `fonts.mjs` (bundled and variable fonts), `folder.mjs` (folder storage on Chromium), `sync-s3.mjs`
+(editing, import / export, storage), `diagram.mjs` (connectors), `fonts.mjs` (bundled and variable fonts), `crop.mjs`, `slice.mjs` (also the export preview), `eyedropper.mjs`, `folder.mjs` (folder storage on Chromium), `sync-s3.mjs`
 (two browsers syncing through a real S3 server).
 
 Layout: `src/core` (document model, geometry, SVG rendering; no DOM), `src/editor` (state and

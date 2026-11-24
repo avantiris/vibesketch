@@ -46,12 +46,15 @@ kbd { background: var(--panel-2); border-radius: 4px; padding: 1px 5px; white-sp
 /* ---- toolbar */
 .toolbar {
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 6px; max-width: calc(100% - 16px);
-  background: var(--panel); border: 1px solid #111; border-radius: 12px; padding: 5px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  background: var(--panel); border: 1px solid #111; border-radius: 14px; padding: 6px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  overflow-x: auto; scrollbar-width: none;
 }
 .tool-group { display: flex; gap: 2px; padding: 0 5px; border-right: 1px solid var(--line); align-items: center; }
 .tool-group:last-child { border-right: 0; }
-.toolbar .icon-btn { width: 30px; height: 30px; border-radius: 7px; }
-.zoom { background: none; border: 0; min-width: 46px; height: 30px; border-radius: 7px; color: var(--dim); }
+.toolbar .icon-btn { width: 34px; height: 34px; border-radius: 9px; }
+.toolbar .icon-btn svg { width: 20px; height: 20px; }
+.toolbar .txt-icon { font-size: 18px; }
+.zoom { background: none; border: 0; min-width: 48px; height: 34px; border-radius: 9px; color: var(--dim); flex: none; }
 .zoom:hover { background: var(--panel-2); color: var(--text); }
 .hintbar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: var(--accent); color: #fff; padding: 5px 12px; border-radius: 8px; max-width: calc(100% - 24px); text-align: center; pointer-events: none; }
 .conflict { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--bad); border-radius: 10px; padding: 10px 12px; display: flex; gap: 8px; align-items: center; max-width: calc(100% - 24px); z-index: 5; }
@@ -179,6 +182,17 @@ kbd { background: var(--panel-2); border-radius: 4px; padding: 1px 5px; white-sp
 .font-list button { background: none; border: 0; text-align: left; padding: 5px 12px; }
 .font-list button:hover, .font-list button.active { background: var(--accent-soft); }
 .shortcuts { display: grid; gap: 5px; padding: 2px 12px; color: var(--dim); }
+.eyedrop { position: fixed; z-index: 1000; cursor: crosshair; overflow: hidden; touch-action: none; }
+.eyedrop-loupe { position: absolute; visibility: hidden; pointer-events: none; display: grid; justify-items: center; gap: 3px; padding: 3px 3px 4px; border: 3px solid #fff; border-radius: 8px; background: #1e1e1e; box-shadow: 0 4px 16px rgba(0, 0, 0, .5); }
+.eyedrop-loupe canvas { display: block; border-radius: 4px; image-rendering: pixelated; }
+.eyedrop-loupe span { color: #fff; font: 11px/1.2 ui-monospace, monospace; }
+.export-preview { padding: 0 12px 8px; }
+.export-preview > .link { padding: 2px 0 6px; }
+.export-preview-box { display: flex; align-items: center; justify-content: center; height: 150px; border-radius: 6px; overflow: hidden; background: #fff repeating-conic-gradient(#d9d9d9 0 25%, transparent 0 50%) 0 0 / 14px 14px; transition: opacity .15s; }
+.export-preview-box.busy { opacity: .75; }
+.export-preview-box img { max-width: 100%; max-height: 100%; display: block; }
+.export-preview-box .hint { background: rgba(0, 0, 0, .6); color: #fff; padding: 3px 8px; border-radius: 4px; }
+.export-preview-size { padding-top: 5px; text-align: center; }
 .legal { margin: 14px 12px; color: var(--dim); font-size: 11px; line-height: 1.5; }
 .legal a { color: inherit; }
 .shortcuts div { display: flex; justify-content: space-between; gap: 8px; }
@@ -223,7 +237,7 @@ kbd { background: var(--panel-2); border-radius: 4px; padding: 1px 5px; white-sp
 .icon-menu { min-width: 170px; }
 .icon-menu button { justify-content: flex-start; gap: 10px; }
 .icon-menu button span { flex: 1; }
-.toolbar .done { height: 30px; padding: 0 14px; border-radius: 7px; }
+.toolbar .done { height: 34px; padding: 0 16px; border-radius: 9px; }
 .btn-grid .btn { padding: 4px 6px; }
 
 /* ---- storage */

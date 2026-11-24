@@ -1,6 +1,7 @@
 import type { Box, Color, Doc, Effect, Mat, Node, Paint, ShapeNode } from './model.ts';
 import { expandBox, round, transformBox } from './geom.ts';
 import { localBounds, paintOutset } from './bounds.ts';
+import { imageRect } from './crop.ts';
 import { capLayout } from './connector.ts';
 import { nodeSubpaths, subpathsToD } from './path.ts';
 import { cssFamily, layoutText } from './text.ts';
@@ -19,6 +20,8 @@ export interface RenderCtx {
   ref(nodeId: string): string;
   /** decimals for coordinates */
   digits?: number;
+  /** draw export slices as dashed frames (the canvas does, exports never do) */
+  slices?: boolean;
 }
 
 export interface Rendered {
@@ -128,6 +131,11 @@ function strokeAttrs(n: ShapeNode, width: number): Attrs {
 }
 
 function renderShape(doc: Doc, n: ShapeNode, ctx: RenderCtx, out: Rendered) {
+  if (n.type === 'rect' && n.slice) {
+    // only its frame can be clicked, so the artwork inside stays reachable
+    if (ctx.slices) out.content.push(h('rect', { width: f(n.w), height: f(n.h), fill: 'none', stroke: '#0d99ff', 'stroke-width': 1, 'stroke-dasharray': '5 4', 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'stroke' }));
+    return;
+  }
   const ref = ctx.ref(n.id), digits = ctx.digits ?? 3;
   const box = shapeBox(doc, n);
   const fills = n.fills.filter(p => p.visible);
@@ -176,8 +184,10 @@ function renderShape(doc: Doc, n: ShapeNode, ctx: RenderCtx, out: Rendered) {
   };
   fills.forEach((p, i) => {
     if (p.type === 'image' && p.mode !== 'tile') {
+      // a cropped image has its own rectangle; the shape clips it
+      const r = p.mode === 'crop' ? imageRect(p, box, doc.assets[p.asset]) : box;
       out.content.push(h('image', {
-        href: ctx.assetUrl(p.asset), x: f(box.x), y: f(box.y), width: f(box.w), height: f(box.h),
+        href: ctx.assetUrl(p.asset), x: f(r.x), y: f(r.y), width: f(r.w), height: f(r.h),
         preserveAspectRatio: p.mode === 'fill' ? 'xMidYMid slice' : p.mode === 'fit' ? 'xMidYMid meet' : 'none',
         opacity: p.opacity < 1 ? f(p.opacity) : undefined, 'clip-path': clip(), style: blendStyle(p.blend),
       }));
@@ -316,6 +326,7 @@ export function renderTree(doc: Doc, ids: string[], ctx: RenderCtx, defs: VEl[],
   for (const id of ids) {
     const n = doc.nodes[id];
     if (!n || !n.visible) continue;
+    if (n.type === 'rect' && n.slice && !ctx.slices) continue; // an export frame is not artwork
     const r = renderNode(doc, n, ctx);
     defs.push(...r.defs);
     const kids = n.type === 'group' ? renderTree(doc, n.children, ctx, defs, decorate) : r.content;

@@ -1,5 +1,5 @@
 import type { Box, Color, Doc, GroupNode, Node, PathNode, TextNode } from '../core/model.ts';
-import { childrenOf, descendants } from '../core/model.ts';
+import { childrenOf, descendants, isSlice } from '../core/model.ts';
 import { mul, translate, union } from '../core/geom.ts';
 import { visualBounds, worldMatrix } from '../core/bounds.ts';
 import { sortByOrder, topMost } from '../core/ops.ts';
@@ -18,6 +18,8 @@ export interface ExportOptions {
   /** page background behind the artwork; omitted = transparent */
   background?: Color | null;
   assetUrl: (key: string) => string;
+  /** export this region of the page (a slice) instead of the bounds of the exported layers */
+  clip?: Box;
   /** prefix for generated ids (when several exports end up in one document) */
   idPrefix?: string;
 }
@@ -29,9 +31,15 @@ function exportRoots(doc: Doc, pageId: string, ids: string[] | null): string[] {
   return sortByOrder(doc, pageId, topMost(doc, ids));
 }
 
+/** whole pixels, never smaller than the region */
+function snapOut(b: Box): Box {
+  const x = Math.round(b.x), y = Math.round(b.y);
+  return { x, y, w: Math.max(1, Math.round(b.x + b.w) - x), h: Math.max(1, Math.round(b.y + b.h) - y) };
+}
+
 export function exportBounds(doc: Doc, roots: string[]): Box {
   let b: Box | null = null;
-  for (const id of roots) if (doc.nodes[id]?.visible) b = union(b, visualBounds(doc, id));
+  for (const id of roots) if (doc.nodes[id]?.visible && !isSlice(doc.nodes[id])) b = union(b, visualBounds(doc, id));
   if (!b) return { x: 0, y: 0, w: 1, h: 1 };
   const x = Math.floor(b.x), y = Math.floor(b.y);
   return { x, y, w: Math.max(1, Math.ceil(b.x + b.w) - x), h: Math.max(1, Math.ceil(b.y + b.h) - y) };
@@ -101,7 +109,7 @@ export async function exportSvg(doc: Doc, pageId: string, ids: string[] | null, 
   const roots = exportRoots(doc, pageId, ids);
   if (opts.outlineText) doc = await outlineText(doc, roots);
   else for (const id of roots.flatMap(r => [r, ...descendants(doc, r)])) { const n = doc.nodes[id]; if (n?.type === 'text') await ensureFont(n.font); }
-  const box = exportBounds(doc, roots);
+  const box = opts.clip ? snapOut(opts.clip) : exportBounds(doc, roots);
 
   const data = new Map<string, string>();
   await Promise.all(usedAssets(doc, roots).map(async k => { try { data.set(k, await toDataUrl(opts.assetUrl(k))); } catch { /* missing asset: left out */ } }));
@@ -204,7 +212,8 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
  *  PDF output has no equivalent for SVG filters. */
 export async function exportPdf(doc: Doc, pageId: string, ids: string[] | null, opts: ExportOptions): Promise<{ blob: Blob; rasterized: number }> {
   const top = exportRoots(doc, pageId, ids).filter(id => doc.nodes[id].visible);
-  const box = exportBounds(doc, top);
+  const box = opts.clip ? snapOut(opts.clip) : exportBounds(doc, top);
+  opts = { ...opts, clip: undefined }; // the parts below are placed by their own bounds
   // rasterize as little as possible: open up plain groups so only the layers that really
   // need it (and what they mask) become images
   const roots: string[] = [];

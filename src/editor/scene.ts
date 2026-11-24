@@ -47,7 +47,7 @@ export class Scene {
 
   constructor(root: SVGGElement, assetUrl: (key: string) => string) {
     this.root = root;
-    this.ctx = { assetUrl, ref: domRef };
+    this.ctx = { assetUrl, ref: domRef, slices: true };
   }
 
   /** forget everything (project switch: asset URLs change) */

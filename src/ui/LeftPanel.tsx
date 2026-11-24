@@ -14,7 +14,7 @@ function typeIcon(n: Node) {
   if (n.mask) return icons.mask;
   switch (n.type) {
     case 'group': return icons.group;
-    case 'rect': return n.fills.some(f => f.type === 'image') ? icons.image : icons.rect;
+    case 'rect': return n.slice ? icons.slice : n.fills.some(f => f.type === 'image') ? icons.image : icons.rect;
     case 'ellipse': return icons.ellipse;
     case 'polygon': return icons.polygon;
     case 'star': return icons.star;

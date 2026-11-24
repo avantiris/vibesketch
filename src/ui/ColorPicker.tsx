@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Color } from '../core/model.ts';
 import { hex } from '../core/render.ts';
-import { canPickColor, pickColor } from '../editor/extras.ts';
+import { pickColor } from '../editor/extras.ts';
 import { Num } from './controls.tsx';
 
 export function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: number } {
@@ -83,7 +83,7 @@ export function ColorPicker(p: { color: Color; onChange: (c: Color, final: boole
         </div>
       )}
       <div class="cp-row">
-        {canPickColor() && <button type="button" class="icon-btn" title="Pick a colour from the screen (I)" aria-label="Eyedropper" onClick={() => void pickColor().then(c => { if (c) { own.current = ''; p.onChange({ ...c, a: p.color.a }, true); } })}>
+        {<button type="button" class="icon-btn" title="Pick a colour from the canvas (I)" aria-label="Eyedropper" onClick={() => void pickColor().then(c => { if (c) { own.current = ''; p.onChange({ ...c, a: p.color.a }, true); } })}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4.5l2 2M3 13l.5-2.500 6-6 2 2-6 6zM10.500 3.500l1-1a1.400 1.400 0 0 1 2 2l-1 1" /></svg>
         </button>}
         <label class="num cp-hex"><span class="num-label">#</span>

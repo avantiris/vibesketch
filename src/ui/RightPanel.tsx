@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ArrowCap, Color, Connector, Effect, GradientPaint, Mat, Node, Paint, PathNode, ShapeNode, TextNode } from '../core/model.ts';
-import { BLACK, BLEND_MODES, DEFAULT_FILL, isShape, solid } from '../core/model.ts';
+import { BLACK, BLEND_MODES, DEFAULT_FILL, isShape, solid, isSlice } from '../core/model.ts';
 import { apply, around, invert, mul, rotate, rotationOf, scale as scaleM, translate } from '../core/geom.ts';
 import { localBounds, worldBoundsOf, worldMatrix } from '../core/bounds.ts';
 import { setNodes, setPage, topMost, transformNodes, transformWorld } from '../core/ops.ts';
 import { hex } from '../core/render.ts';
-import { align, distribute, exportSelection, flip, toggleMask } from '../editor/actions.ts';
+import { align, distribute, exportSelection, flip, toggleMask, exportPreview } from '../editor/actions.ts';
 import type { ExportFormat } from '../editor/actions.ts';
 import { connectorStyle } from '../editor/connect.ts';
+import { cropEdit, croppable, enterCrop } from '../editor/crop.ts';
 import { gradientEdit, lockAspect } from '../editor/extras.ts';
 import { canUseLocalFonts, ensureFont, facesOf, families, fontsVersion, hasFamily, loadLocalFonts, localFontsLoaded } from '../editor/fonts.ts';
 import { lastFont } from '../editor/interact.ts';
 import { addMidpoints, cutAtPoints, deleteSelectedPoints, joinPoints, nudgePoints, selectedPointInfo, setPointMode, straightenPoints, toggleClosed } from '../editor/pathtool.ts';
-import { addAsset, assetUrl, commit, doc, localSet, page, pageId, pathEdit, selection, toast, update } from '../editor/store.ts';
+import { addAsset, assetUrl, commit, doc, localSet, page, pageId, pathEdit, selection, toast, update, assetsVersion } from '../editor/store.ts';
 import { ColorPicker, cssColor } from './ColorPicker.tsx';
 import { IconButton, Num, Popover, Section, Select, icons } from './controls.tsx';
 
@@ -377,8 +378,11 @@ function ImageEditor({ paint, set }: { paint: Paint; set: (p: Paint, final: bool
       {paint.type === 'image' && <div class="image-preview" style={{ background: paintCss(paint) }} />}
       <div class="row grid2">
         <label class="btn">Choose image…<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" hidden onChange={e => { const f = e.currentTarget.files?.[0]; if (f) void pick(f); }} /></label>
-        {paint.type === 'image' && <Select value={paint.mode} options={['fill', 'fit', 'stretch', 'tile']} onChange={mode => set({ ...paint, mode }, true)} />}
+        {paint.type === 'image' && <Select value={paint.mode} options={['fill', 'fit', 'stretch', 'tile', 'crop']} onChange={mode => set({ ...paint, mode }, true)} />}
       </div>
+      {paint.type === 'image' && paint.mode !== 'tile' && selection.value.length === 1 && croppable(doc.value.nodes[selection.value[0]]) >= 0 && (
+        <div class="row"><button type="button" class="btn wide" title="Cut the picture: drag the frame's handles, drag the picture to move it behind the frame (also: double-click the image)" onClick={() => enterCrop(selection.value[0])}>Crop on the canvas</button></div>
+      )}
       {paint.type === 'image' && paint.mode === 'tile' && <div class="row grid2"><Num label="Scale" value={paint.scale ?? 1} scale={100} suffix="%" min={0.01} onChange={(v, f) => set({ ...paint, scale: v }, f)} /></div>}
     </div>
   );
@@ -536,20 +540,64 @@ function EffectsSection({ nodes, change }: { nodes: Node[]; change: Change }) {
 
 // ---------------------------------------------------------------- export + page
 
-function ExportSection({ hasSelection }: { hasSelection: boolean }) {
+/** remembered while the app is open */
+let previewOpen = true;
+
+/** A picture of what Export would write, redrawn shortly after anything changes. */
+function ExportPreview({ format, scale, bg, hasSelection }: { format: ExportFormat; scale: number; bg: boolean; hasSelection: boolean }) {
+  const [open, setOpen] = useState(previewOpen);
+  const [shot, setShot] = useState<{ url: string; w: number; h: number; more: number } | null>(null);
+  const [state, setState] = useState<'idle' | 'busy' | 'empty' | 'error'>('idle');
+  const d = doc.value, selKey = selection.value.join(','), pid = pageId.value;
+  void assetsVersion.value; void fontsVersion.value;
+  useEffect(() => {
+    if (!open) return;
+    let stale = false;
+    setState('busy');
+    const t = setTimeout(() => {
+      exportPreview(format, { background: bg, selectionOnly: hasSelection }).then(r => {
+        if (stale) { if (r) URL.revokeObjectURL(r.url); return; }
+        setShot(old => { if (old) URL.revokeObjectURL(old.url); return r; });
+        setState(r ? 'idle' : 'empty');
+      }).catch(() => { if (!stale) setState('error'); });
+    }, 250);
+    return () => { stale = true; clearTimeout(t); };
+  }, [open, d, selKey, pid, format, bg, hasSelection, assetsVersion.value, fontsVersion.value]);
+  useEffect(() => () => setShot(old => { if (old) URL.revokeObjectURL(old.url); return null; }), []);
+  const k = format === 'png' || format === 'jpg' ? scale : 1;
+  const size = shot ? (format === 'pdf' ? `${Math.round(shot.w * 0.75 * 100) / 100} × ${Math.round(shot.h * 0.75 * 100) / 100} pt` : `${Math.round(shot.w * k)} × ${Math.round(shot.h * k)} px`) : '';
+  return (
+    <div class="export-preview">
+      <button type="button" class="link" aria-expanded={open} onClick={() => { previewOpen = !open; setOpen(!open); }}>{open ? '▾' : '▸'} Preview</button>
+      {open && (
+        <>
+          <div class={`export-preview-box ${state === 'busy' ? 'busy' : ''}`}>
+            {state === 'empty' ? <span class="hint">Nothing to export</span>
+              : state === 'error' ? <span class="hint">No preview for this</span>
+              : shot && <img src={shot.url} alt="Export preview" draggable={false} />}
+          </div>
+          {shot && state !== 'empty' && state !== 'error' && <div class="hint export-preview-size">{size}{shot.more > 0 ? ` · and ${shot.more} more slice${shot.more > 1 ? 's' : ''}` : ''}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ExportSection({ hasSelection, slice }: { hasSelection: boolean; slice?: boolean }) {
   const [format, setFormat] = useState<ExportFormat>('svg');
   const [scale, setScale] = useState(2);
   const [outline, setOutline] = useState(false);
   const [bg, setBg] = useState(false);
   const [busy, setBusy] = useState(false);
   return (
-    <Section title={hasSelection ? 'Export selection' : 'Export page'}>
+    <Section title={slice ? 'Export slice' : hasSelection ? 'Export selection' : 'Export page'}>
       <div class="row grid2">
         <Select value={format} options={[{ value: 'svg', label: 'SVG' }, { value: 'png', label: 'PNG' }, { value: 'jpg', label: 'JPG' }, { value: 'pdf', label: 'PDF' }]} onChange={setFormat} />
         {(format === 'png' || format === 'jpg') ? <Num label="Scale" value={scale} suffix="x" min={0.1} max={32} step={0.5} onChange={v => setScale(v)} /> : <span />}
       </div>
       {format === 'svg' && <div class="row"><label class="check"><input type="checkbox" checked={outline} onChange={e => setOutline(e.currentTarget.checked)} /> Outline text</label></div>}
       <div class="row"><label class="check"><input type="checkbox" checked={bg} onChange={e => setBg(e.currentTarget.checked)} /> Include page background</label></div>
+      <ExportPreview format={format} scale={scale} bg={bg} hasSelection={hasSelection} />
       <div class="row"><button type="button" class="btn primary wide" disabled={busy} onClick={async () => { setBusy(true); await exportSelection(format, scale, { outlineText: outline, background: bg, selectionOnly: hasSelection }); setBusy(false); }}>{busy ? 'Exporting…' : `Export ${format.toUpperCase()}`}</button></div>
     </Section>
   );
@@ -618,7 +666,7 @@ export function RightPanel() {
         <ExportSection hasSelection={false} />
         <Section title="Shortcuts">
           <div class="shortcuts">
-            {[['V', 'Move'], ['R / O / L', 'Rectangle / Ellipse / Line'], ['P', 'Pen'], ['T', 'Text'], ['X', 'Connector'], ['Enter', 'Edit points / text'], ['Space + drag', 'Pan'], ['Ctrl + wheel', 'Zoom'], ['Shift + 1', 'Zoom to fit'], ['Alt + drag', 'Duplicate'], ['Ctrl + G', 'Group'], ['Ctrl + click', 'Select inside groups'], ['Ctrl (hold)', 'Disable snapping']].map(([k, v]) => <div><kbd>{k}</kbd><span>{v}</span></div>)}
+            {[['V', 'Move'], ['R / O / L', 'Rectangle / Ellipse / Line'], ['P', 'Pen'], ['T', 'Text'], ['X', 'Connector'], ['S', 'Slice (export frame)'], ['I', 'Eyedropper'], ['Double-click image', 'Crop'], ['Enter', 'Edit points / text'], ['Space + drag', 'Pan'], ['Ctrl + wheel', 'Zoom'], ['Shift + 1', 'Zoom to fit'], ['Alt + drag', 'Duplicate'], ['Ctrl + G', 'Group'], ['Ctrl + click', 'Select inside groups'], ['Ctrl (hold)', 'Disable snapping']].map(([k, v]) => <div><kbd>{k}</kbd><span>{v}</span></div>)}
           </div>
         </Section>
         <p class="legal">Free software under the GNU AGPL, version 3 or later. <a href="licenses.html" target="_blank" rel="noopener">Licences and source code</a></p>
@@ -628,20 +676,22 @@ export function RightPanel() {
   const shapes = nodes.filter(isShape);
   const texts = nodes.filter((n): n is TextNode => n.type === 'text');
   const allShapes = shapes.length === nodes.length;
-  const kind = nodes.length === 1 ? ({ rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', star: 'Star', path: 'Vector', text: 'Text', group: 'Group' } as const)[nodes[0].type].replace('Vector', nodes[0].type === 'path' && nodes[0].connector ? 'Connector' : 'Vector') : `${nodes.length} layers`;
+  const slices = nodes.every(isSlice);
+  const kind = nodes.length === 1 ? ({ rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', star: 'Star', path: 'Vector', text: 'Text', group: 'Group' } as const)[nodes[0].type].replace('Vector', nodes[0].type === 'path' && nodes[0].connector ? 'Connector' : 'Vector').replace('Rectangle', isSlice(nodes[0]) ? 'Slice' : 'Rectangle') : `${nodes.length} layers`;
   return (
     <aside class="panel right" key={pathEdit.value ? 'edit' : 'design'}>
-      <div class="panel-title">{kind}{pathEdit.value && <span class="badge">editing points</span>}</div>
+      <div class="panel-title">{kind}{pathEdit.value && <span class="badge">editing points</span>}{cropEdit.value && <span class="badge">cropping</span>}</div>
       {pathEdit.value && <PointsSection />}
       <TransformSection nodes={nodes} />
-      <ShapeSection nodes={nodes} change={change} />
+      {slices && <div class="hint" style="padding:0 12px 10px">An export frame: it is not part of the artwork. Export gives what the page shows inside it, at this size.</div>}
+      {!slices && <ShapeSection nodes={nodes} change={change} />}
       {!pathEdit.value && <LineSection nodes={nodes} change={change} />}
-      <LayerSection nodes={nodes} change={change} />
+      {!slices && <LayerSection nodes={nodes} change={change} />}
       {texts.length > 0 && texts.length === nodes.length && <TextSection nodes={texts} change={change} />}
-      {allShapes && <PaintList title="Fill" nodes={shapes} prop="fills" change={change} />}
-      {allShapes && <PaintList title="Stroke" nodes={shapes} prop="strokes" change={change} />}
-      <EffectsSection nodes={nodes} change={change} />
-      <ExportSection hasSelection />
+      {allShapes && !slices && <PaintList title="Fill" nodes={shapes} prop="fills" change={change} />}
+      {allShapes && !slices && <PaintList title="Stroke" nodes={shapes} prop="strokes" change={change} />}
+      {!slices && <EffectsSection nodes={nodes} change={change} />}
+      <ExportSection hasSelection slice={slices} />
     </aside>
   );
 }

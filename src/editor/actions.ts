@@ -1,6 +1,6 @@
 import type { AssetMeta, Doc, Node, Paint } from '../core/model.ts';
-import { childrenOf, descendants, emptyDoc, newId } from '../core/model.ts';
-import { worldBoundsOf } from '../core/bounds.ts';
+import { childrenOf, descendants, emptyDoc, isSlice, newId } from '../core/model.ts';
+import { worldBounds, worldBoundsOf } from '../core/bounds.ts';
 import type { AlignHow } from '../core/ops.ts';
 import { alignNodes, cloneSubtrees, distributeNodes, duplicateNodes, flipNodes, groupNodes, insertNodes, removeNodes, reorder, setNodes, topMost, translateWorld, ungroupNodes } from '../core/ops.ts';
 import { api } from '../io/api.ts';
@@ -200,10 +200,34 @@ export type ExportFormat = 'svg' | 'png' | 'jpg' | 'pdf';
 
 export async function exportSelection(format: ExportFormat, scale: number, opts: { outlineText: boolean; background: boolean; selectionOnly: boolean }) {
   const d = doc.value;
-  const ids = opts.selectionOnly && selection.value.length ? sel() : null;
-  const base = (ids && ids.length === 1 ? d.nodes[ids[0]].name : ids ? project.value : `${project.value}${d.pages.length > 1 ? ' - ' + page.value.name : ''}`) || 'export';
+  const picked = opts.selectionOnly && selection.value.length ? sel() : null;
+  // slices: each one exports what the page shows inside it
+  if (picked?.length && picked.every(id => isSlice(d.nodes[id]))) {
+    for (const id of picked) await exportOne(format, scale, opts, null, d.nodes[id].name, worldBounds(d, id));
+    return;
+  }
+  await exportOne(format, scale, opts, picked);
+}
+
+/** What the export would look like: an image URL (release it with URL.revokeObjectURL) and
+ *  the size in px at scale 1. Follows the same rules as exportSelection; of several slices it
+ *  shows the first. */
+export async function exportPreview(format: ExportFormat, opts: { background: boolean; selectionOnly: boolean }): Promise<{ url: string; w: number; h: number; more: number } | null> {
+  const d = doc.value;
+  const picked = opts.selectionOnly && selection.value.length ? sel() : null;
+  const slices = picked?.length && picked.every(id => isSlice(d.nodes[id])) ? picked : null;
+  if (!slices && !(picked ?? childrenOf(d, pageId.value)).some(id => d.nodes[id]?.visible && !isSlice(d.nodes[id]))) return null;
+  const page0 = page.value.background;
+  const background = opts.background ? page0 : format === 'jpg' ? { r: 1, g: 1, b: 1, a: 1 } : null;
+  const r = await exportSvg(d, pageId.value, slices ? null : picked, { assetUrl, background: background && format === 'jpg' ? { ...background, a: 1 } : background, outlineText: true, clip: slices ? worldBounds(d, slices[0]) : undefined });
+  return { url: URL.createObjectURL(new Blob([r.svg], { type: 'image/svg+xml' })), w: r.width, h: r.height, more: slices ? slices.length - 1 : 0 };
+}
+
+async function exportOne(format: ExportFormat, scale: number, opts: { outlineText: boolean; background: boolean }, ids: string[] | null, sliceName?: string, clip?: ReturnType<typeof worldBounds>) {
+  const d = doc.value;
+  const base = sliceName || (ids && ids.length === 1 ? d.nodes[ids[0]].name : ids ? project.value : `${project.value}${d.pages.length > 1 ? ' - ' + page.value.name : ''}`) || 'export';
   const name = base.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'export';
-  const common = { assetUrl, background: opts.background ? page.value.background : null };
+  const common = { assetUrl, background: opts.background ? page.value.background : null, clip };
   try {
     if (format === 'svg') {
       const r = await exportSvg(d, pageId.value, ids, { ...common, outlineText: opts.outlineText });

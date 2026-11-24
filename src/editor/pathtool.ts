@@ -1,3 +1,4 @@
+import { isSlice } from '../core/model.ts';
 import type { Mat, PathNode, PathPoint, SubPath, Vec } from '../core/model.ts';
 import { newId, shapeDefaults, solid } from '../core/model.ts';
 import { apply, applyLin, dist, invert, len, normBox, pointInBox, sub } from '../core/geom.ts';
@@ -43,7 +44,7 @@ const neg = (v: Vec): Vec => ({ x: -v.x, y: -v.y });
 
 export function enterPathEdit(id: string) {
   const n = doc.value.nodes[id];
-  if (!n || n.type === 'group' || n.type === 'text' || n.locked) return;
+  if (!n || n.type === 'group' || n.type === 'text' || n.locked || isSlice(n)) return;
   if (n.type === 'path' && n.connector) {
     // editing the points by hand turns a connector into a plain path (it would be re-routed
     // otherwise); leaving without a change keeps it attached

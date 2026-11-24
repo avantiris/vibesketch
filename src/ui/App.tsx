@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { copyAsSvg, group, order, ungroup } from '../editor/actions.ts';
+import { cropEdit } from '../editor/crop.ts';
 import { uiHidden } from '../editor/extras.ts';
 import { setZoom, zoomToFit } from '../editor/interact.ts';
 import { installKeys, setTool } from '../editor/keys.ts';
@@ -25,6 +26,7 @@ const TOOLS: { id: Tool; title: string; icon: keyof typeof icons }[] = [
   { id: 'pen', title: 'Pen (P)', icon: 'pen' },
   { id: 'connector', title: 'Connector: drag from one layer to another to link them with an arrow that stays attached (X)', icon: 'connector' },
   { id: 'text', title: 'Text (T)', icon: 'text' },
+  { id: 'slice', title: 'Slice: draw a frame, then export it to get exactly what the page shows inside (S)', icon: 'slice' },
 ];
 
 function Toolbar() {
@@ -109,6 +111,8 @@ export function App() {
     ? (tool.value === 'pen' ? 'Click to add points, drag for curves · click the first point to close · click any point to branch off it · Enter / Esc to finish'
       : tool.value === 'bend' ? 'Drag a segment or a point to curve it · click a point to toggle corner / curve'
       : 'Drag points, handles and segments · drag the dot in the middle of a segment to add a point · hold Ctrl to bend · right-click for more')
+    : cropEdit.value ? 'Drag the blue handles to cut the picture · drag the picture to move it behind the frame · round handles scale it · Ctrl: no snapping · Enter / Esc to finish'
+    : tool.value === 'slice' ? 'Drag a frame around what you want to export · select it and use Export in the right panel'
     : tool.value === 'connector' ? 'Drag from one layer to another · drop on a side dot to pin that side · Ctrl keeps the end free'
     : null;
   return (

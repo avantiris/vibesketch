@@ -1,5 +1,5 @@
 import type { ArrowCap, Box, Connector, ConnectorEnd, PathNode, Side, Vec } from '../core/model.ts';
-import { childrenOf, newId, shapeDefaults, solid } from '../core/model.ts';
+import { childrenOf, isSlice, newId, shapeDefaults, solid } from '../core/model.ts';
 import { apply, boxContains, dist, expandBox, invert, pointInBox } from '../core/geom.ts';
 import { worldBounds, worldMatrix } from '../core/bounds.ts';
 import { SIDES, isConnector, sideAnchor } from '../core/connector.ts';
@@ -30,7 +30,7 @@ function pickEnd(e: Ev, exclude: Set<string>): { end: ConnectorEnd | null; box: 
   let hit: { id: string; box: Box; text: boolean } | null = null;
   for (let i = kids.length - 1; i >= 0; i--) {
     const n = d.nodes[kids[i]];
-    if (!n || !n.visible || exclude.has(n.id) || isConnector(n)) continue;
+    if (!n || !n.visible || exclude.has(n.id) || isConnector(n) || isSlice(n)) continue;
     const box = worldBounds(d, n.id);
     if (!pointInBox(w, expandBox(box, slack))) continue;
     if (!hit) { hit = { id: n.id, box, text: n.type === 'text' }; if (!hit.text) break; continue; }

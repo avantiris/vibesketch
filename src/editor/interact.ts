@@ -6,6 +6,7 @@ import { duplicateNodes, insertNodes, normalizePath, removeNodes, setNode, topMo
 import { layoutText } from '../core/text.ts';
 import { lockAspect, rememberDuplicate } from './extras.ts';
 import { connectorDown, connectorEndAt, connectorEndDown, connectorHover, soleConnector } from './connect.ts';
+import { cropDown, cropEdit, cropHover, enterCrop, exitCrop } from './crop.ts';
 import { defaultFamily } from './fonts.ts';
 import { handleDown, handleHover } from './handles.ts';
 import type { DragOp } from './pathtool.ts';
@@ -255,7 +256,7 @@ function startRotate(e: PointerEvent, f: Frame): DragOp {
 
 // ---------------------------------------------------------------- shape creation
 
-function startCreate(e: PointerEvent, kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'line'): DragOp {
+function startCreate(e: PointerEvent, kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'line' | 'slice'): DragOp {
   const base = doc.value;
   const container = scopeId.value;
   const targets = prefs.snapObjects.value ? collectTargets(base, container, new Set(), viewportWorld()) : [];
@@ -283,6 +284,7 @@ function startCreate(e: PointerEvent, kind: 'rect' | 'ellipse' | 'polygon' | 'st
     if (ev.shiftKey) { const s = Math.max(Math.abs(dx), Math.abs(dy)); dx = Math.sign(dx || 1) * s; dy = Math.sign(dy || 1) * s; }
     const box = ev.altKey ? { x: a.x - Math.abs(dx), y: a.y - Math.abs(dy), w: Math.abs(dx) * 2, h: Math.abs(dy) * 2 } : normBox(a, { x: a.x + dx, y: a.y + dy });
     const common = { ...defaults, id, parent: container, transform: mul(Pinv, translate(box.x, box.y)), fills: [solid(DEFAULT_FILL)], w: Math.max(box.w, 0.01), h: Math.max(box.h, 0.01) };
+    if (kind === 'slice') return { ...common, type: 'rect', name: 'Slice', radii: [0, 0, 0, 0], fills: [], slice: true };
     if (kind === 'rect') return { ...common, type: 'rect', name: 'Rectangle', radii: [0, 0, 0, 0] };
     if (kind === 'ellipse') return { ...common, type: 'ellipse', name: 'Ellipse' };
     if (kind === 'polygon') return { ...common, type: 'polygon', name: 'Polygon', sides: 3 };
@@ -381,6 +383,11 @@ function startPan(e: PointerEvent): DragOp {
 
 function moveToolDown(e: PointerEvent, dbl: boolean): DragOp | null {
   if (pathEdit.value) return pathDown(e, dbl);
+  if (cropEdit.value) {
+    const op = cropDown(e, dbl);
+    if (op) return op;
+    if (dbl) return null; // a double-click ends cropping and nothing else
+  }
   const s = eventScreen(e), w = toWorld(s);
   const f = selectionFrame();
   const deep = e.ctrlKey || e.metaKey;
@@ -394,7 +401,8 @@ function moveToolDown(e: PointerEvent, dbl: boolean): DragOp | null {
       const inner = hitNode(e, false);
       select(inner ? [inner.id] : []);
     } else if (n.type === 'text') startTextEdit(hit.id);
-    else enterPathEdit(hit.id);
+    // an image is cropped; its outline is still editable with Enter
+    else if (!enterCrop(hit.id)) enterPathEdit(hit.id);
     return null;
   }
 
@@ -446,13 +454,14 @@ function onDown(e: PointerEvent) {
   if (e.button === 1 || (e.button === 0 && (spaceDown || tool.value === 'hand'))) op = startPan(e);
   else if (e.button !== 0) return;
   else {
+    if (tool.value !== 'move') exitCrop();
     switch (tool.value) {
       case 'move': op = moveToolDown(e, dbl); break;
       case 'pen': op = penDown(e); break;
       case 'bend': if (pathEdit.value) op = pathDown(e, dbl); else tool.value = 'move'; break;
       case 'text': op = startText(e); break;
       case 'connector': pathEdit.value = null; op = connectorDown(e); break;
-      case 'rect': case 'ellipse': case 'polygon': case 'star': case 'line':
+      case 'rect': case 'ellipse': case 'polygon': case 'star': case 'line': case 'slice':
         pathEdit.value = null;
         op = startCreate(e, tool.value); break;
     }
@@ -476,6 +485,7 @@ function onMove(e: PointerEvent) {
   if (tool.value === 'connector') { connectorHover(e); el.style.cursor = 'crosshair'; return; }
   if (tool.value !== 'move' && !(tool.value === 'bend' && pathEdit.value)) { el.style.cursor = toolCursor(); return; }
   if (pathEdit.value) { el.style.cursor = pathHover(e); return; }
+  if (cropEdit.value) { el.style.cursor = cropHover(e); if (hover.value) hover.value = null; return; }
   if (handleHover(eventScreen(e))) { el.style.cursor = 'pointer'; if (hover.value) hover.value = null; return; }
   if (connectorEndAt(eventScreen(e))) { el.style.cursor = 'pointer'; if (hover.value) hover.value = null; return; }
   const f = soleConnector() ? null : selectionFrame();
@@ -515,10 +525,16 @@ export function wheelZoomFactor(e: { deltaY: number; deltaMode: number }): numbe
   return Math.exp(-Math.max(-40, Math.min(40, px)) * 0.01);
 }
 
+// Some window systems deliver wheel events without the modifier state when the window has just
+// got the pointer (seen on Wayland): the Ctrl key press itself still arrives, so remember it.
+let ctrlHeld = false;
+const ctrlKey = (e: KeyboardEvent) => { if (e.key === 'Control' || e.key === 'Meta') ctrlHeld = e.type === 'keydown'; else if (!e.ctrlKey && !e.metaKey) ctrlHeld = false; };
+const ctrlOff = () => { ctrlHeld = false; };
+
 function onWheel(e: WheelEvent) {
   e.preventDefault();
   const s = eventScreen(e);
-  if (e.ctrlKey || e.metaKey) {
+  if (e.ctrlKey || e.metaKey || ctrlHeld) {
     setZoom(view.value.zoom * wheelZoomFactor(e), s);
   } else {
     const unit = e.deltaMode === 1 ? 33 : 1;
@@ -533,6 +549,9 @@ export function attach(el: HTMLElement): () => void {
   el.addEventListener('pointerup', onUp);
   el.addEventListener('pointercancel', onUp);
   el.addEventListener('wheel', onWheel, { passive: false });
+  window.addEventListener('keydown', ctrlKey, true);
+  window.addEventListener('keyup', ctrlKey, true);
+  window.addEventListener('blur', ctrlOff);
   const leave = () => { if (hover.value) hover.value = null; if (ov.connect && !drag) { ov.connect = null; redraw(); } };
   el.addEventListener('pointerleave', leave);
   const ctx = (e: Event) => e.preventDefault();
@@ -550,6 +569,9 @@ export function attach(el: HTMLElement): () => void {
   };
   el.addEventListener('contextmenu', menu);
   return () => {
+    window.removeEventListener('keydown', ctrlKey, true);
+    window.removeEventListener('keyup', ctrlKey, true);
+    window.removeEventListener('blur', ctrlOff);
     el.removeEventListener('pointerdown', onDown);
     el.removeEventListener('pointermove', onMove);
     el.removeEventListener('pointerup', onUp);

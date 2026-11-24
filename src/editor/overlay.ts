@@ -3,11 +3,12 @@ import { apply, mul } from '../core/geom.ts';
 import { localBounds, worldBounds, worldMatrix } from '../core/bounds.ts';
 import { SIDES, sideAnchor } from '../core/connector.ts';
 import { connectorEnds } from './connect.ts';
+import { cropGrips, cropState } from './crop.ts';
 import { gradientLine, measurements, radiusDots } from './handles.ts';
 import { nodeSubpaths, segmentsOf } from '../core/path.ts';
 import { handlePoints, key, midpointOf, parseKey, pathNode } from './pathtool.ts';
-import { frameCorners, handlePoint, ov, selectionFrame } from './stage.ts';
-import { doc, hover, pathEdit, selection, textEdit, tool, view } from './store.ts';
+import { frameCorners, handlePoint, ov, redraw, selectionFrame } from './stage.ts';
+import { assetUrl, doc, hover, pathEdit, selection, textEdit, tool, view } from './store.ts';
 
 // Everything drawn on top of the artwork in screen space: selection, handles, smart guides,
 // vector-edit points, marquee.
@@ -61,12 +62,46 @@ export function drawOverlay(canvas: HTMLCanvasElement) {
   const pe = pathEdit.value;
   const editing = pe ? pathNode() : null;
 
+  // cropping an image: the whole picture dimmed, the frame that cuts it, handles for both
+  const crop = cropState();
+  if (crop) {
+    const M = mul(V, crop.M);
+    const quad = (b: { x: number; y: number; w: number; h: number }) => [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y }, { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }].map(p => apply(M, p));
+    const trace = (pts: Vec[]) => { pts.forEach((p, i) => (i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y))); c.closePath(); };
+    const frame = quad(crop.box), image = quad(crop.img);
+    const pic = ghost(assetUrl(crop.paint.asset));
+    c.save();
+    // everything of the image that the frame cuts away
+    c.beginPath(); trace(image); trace(frame); c.clip('evenodd');
+    if (pic) {
+      c.globalAlpha = 0.4;
+      c.transform(M[0], M[1], M[2], M[3], M[4], M[5]);
+      c.drawImage(pic, crop.img.x, crop.img.y, crop.img.w, crop.img.h);
+    } else { c.fillStyle = 'rgba(255,255,255,.12)'; c.fill('evenodd'); }
+    c.restore();
+    c.lineWidth = 1;
+    c.strokeStyle = 'rgba(255,255,255,.75)'; c.setLineDash([4, 4]);
+    c.beginPath(); trace(image); c.stroke();
+    c.setLineDash([]);
+    c.strokeStyle = ACCENT; c.lineWidth = 1.5;
+    c.beginPath(); trace(frame); c.stroke();
+    for (const g of cropGrips(crop)) {
+      c.beginPath();
+      if (g.grip.kind === 'image') { c.arc(g.p.x, g.p.y, 4, 0, Math.PI * 2); c.fillStyle = '#fff'; c.strokeStyle = '#444'; c.lineWidth = 1; }
+      else { c.rect(Math.round(g.p.x) - 4.5, Math.round(g.p.y) - 4.5, 9, 9); c.fillStyle = ACCENT; c.strokeStyle = '#fff'; c.lineWidth = 1.5; }
+      c.fill(); c.stroke();
+    }
+    const bottom = frame.reduce((a, p) => (p.y > a.y ? p : a), frame[0]);
+    const cx = (Math.min(...frame.map(p => p.x)) + Math.max(...frame.map(p => p.x))) / 2;
+    badge(c, `Crop ${num(Math.hypot(crop.M[0], crop.M[1]) * crop.box.w)} × ${num(Math.hypot(crop.M[2], crop.M[3]) * crop.box.h)}`, cx, bottom.y + 18, ACCENT);
+  }
+
   // hover
   const hn = hover.value && d.nodes[hover.value];
   if (hn && !editing && tool.value === 'move') outline(hn, 2);
 
   // selection
-  if (!editing) {
+  if (!editing && !crop) {
     const sel = selection.value;
     if (sel.length > 1 && sel.length <= 200) for (const id of sel) { const n = d.nodes[id]; if (n) outline(n, 1); }
     const f = selectionFrame(d, sel);
@@ -264,6 +299,20 @@ function cross(c: CanvasRenderingContext2D, x: number, y: number) {
   c.moveTo(x - 3, y - 3); c.lineTo(x + 3, y + 3);
   c.moveTo(x + 3, y - 3); c.lineTo(x - 3, y + 3);
   c.stroke();
+}
+
+/** the picture of an asset, for drawing on the overlay; null until it has loaded */
+const ghosts = new Map<string, HTMLImageElement | null>();
+function ghost(url: string): HTMLImageElement | null {
+  if (!url) return null;
+  if (!ghosts.has(url)) {
+    ghosts.set(url, null);
+    if (ghosts.size > 12) ghosts.delete(ghosts.keys().next().value!);
+    const img = new Image();
+    img.onload = () => { ghosts.set(url, img); redraw(); };
+    img.src = url;
+  }
+  return ghosts.get(url) ?? null;
 }
 
 function badge(c: CanvasRenderingContext2D, text: string, x: number, y: number, color: string) {

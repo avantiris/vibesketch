@@ -109,8 +109,8 @@ export function pointInFrame(f: Frame, w: Vec): boolean {
 }
 
 const ROTATE_CURSOR = (() => {
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path d='M5 14a7 7 0 1 1 3 5.7' fill='none' stroke='white' stroke-width='4' stroke-linecap='round'/><path d='M5 14a7 7 0 1 1 3 5.7' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round'/><path d='M1.5 12.5 5 16.5l3.6-4' fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/><path d='M1.5 12.5 5 16.5l3.6-4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 12 12, crosshair`;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='-1 -1 26 26'><path d='M5 14a7 7 0 1 1 3 5.7' fill='none' stroke='white' stroke-width='5.4' stroke-linecap='round'/><path d='M5 14a7 7 0 1 1 3 5.7' fill='none' stroke='black' stroke-width='2.8' stroke-linecap='round'/><path d='M1.5 12.5 5 16.5l3.6-4' fill='none' stroke='white' stroke-width='5.4' stroke-linecap='round' stroke-linejoin='round'/><path d='M1.5 12.5 5 16.5l3.6-4' fill='none' stroke='black' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 13 13, crosshair`;
 })();
 
 export function handleCursor(f: Frame, h: Handle): string {
